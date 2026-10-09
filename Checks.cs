@@ -82,6 +82,11 @@ namespace GpuDesktopKeeper {
             var legacy=Storage.Json.Deserialize<Preferences>("{\"AutoRecover\":true,\"WatchDevice\":false,\"StartMinimized\":true}");
             Require(legacy.StartEnabled && legacy.RememberMode && legacy.StartupMode()==Modes.Default,"Legacy settings lost new defaults");
             Require(!preferences.DarkTheme && !legacy.DarkTheme,"Fresh or legacy settings changed default theme");
+            Require(preferences.Language=="ru" && legacy.Language=="ru","Legacy settings changed default language");
+            preferences.Language="EN";
+            Require(Storage.Json.Deserialize<Preferences>(Storage.Json.Serialize(preferences)).Language=="en","Language did not persist or normalize");
+            preferences.Language="unsupported"; Require(preferences.Language=="ru","Invalid language not normalized");
+            preferences.Language=null; Require(preferences.Language=="ru","Null language not normalized");
             preferences.DarkTheme=true;
             Require(Storage.Json.Deserialize<Preferences>(Storage.Json.Serialize(preferences)).DarkTheme,"Dark theme did not persist");
             var savedOldMode=Storage.Json.Deserialize<Preferences>("{\"SavedMode\":0}");

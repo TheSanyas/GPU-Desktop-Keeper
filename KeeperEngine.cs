@@ -6,12 +6,13 @@ namespace GpuDesktopKeeper {
     internal static class Modes {
         internal const KeeperMode Default=KeeperMode.DeviceOnly;
         internal static readonly KeeperMode[] Order={KeeperMode.DeviceOnly,KeeperMode.Verified,KeeperMode.SmallBuffer,KeeperMode.LargeBuffer};
-        internal static readonly string[] Names = {
+        private static readonly string[] NameKeys = {
             "Эксперимент — устройство и два буфера",
             "Основной — только устройство 11.1",
             "Эксперимент — устройство и буфер 96 байт",
             "Эксперимент — устройство и буфер 8192 байта"
         };
+        internal static string[] Names { get { return Array.ConvertAll(NameKeys,UiText.Get); } }
         internal static int Buffers(KeeperMode mode) { return mode==KeeperMode.Verified ? 2 : mode==KeeperMode.DeviceOnly ? 0 : 1; }
         internal static int Bytes(KeeperMode mode) { return mode==KeeperMode.Verified ? 8288 : mode==KeeperMode.SmallBuffer ? 96 : mode==KeeperMode.LargeBuffer ? 8192 : 0; }
     }
@@ -94,7 +95,7 @@ namespace GpuDesktopKeeper {
             try {
                 int hr=lease.RemovedReason();
                 if(hr==0) return true;
-                LastError="GPU недоступен: 0x"+hr.ToString("X8");
+                LastError=UiText.Get("GPU недоступен: 0x")+hr.ToString("X8");
             } catch(Exception ex) { LastError=ex.Message; }
             log(LastError); Release(); Publish(); return false;
         }

@@ -27,6 +27,8 @@ namespace GpuDesktopKeeper {
         public int SavedMode { get; set; }
         public bool HideFlydigiWarning { get; set; }
         public bool DarkTheme { get; set; }
+        private string language="ru";
+        public string Language { get { return language; } set { language=UiText.Normalize(value); } }
         public Preferences() { AutoRecover=true; StartEnabled=true; RememberMode=true; SavedMode=(int)Modes.Default; }
         internal KeeperMode StartupMode() {
             return RememberMode && Enum.IsDefined(typeof(KeeperMode),SavedMode) ? (KeeperMode)SavedMode : Modes.Default;
@@ -81,12 +83,13 @@ namespace GpuDesktopKeeper {
             bool startup=args.Length==1 && args[0]=="--startup";
             bool minimized=startup || (args.Length==1 && args[0]=="--minimized");
             if(args.Length>0 && !minimized) return 2;
+            var preferences=Storage.Load(); UiText.Language=preferences.Language;
             bool created;
             // Shared with v1, preventing an unnoticed second lease from corrupting comparisons.
             using(var mutex=new Mutex(true,@"Local\GpuDesktopKeeper.Manual.v1",out created)) {
                 if(!created) {
                     if(startup) return 0;
-                    MessageBox.Show("GPU Desktop Keeper уже запущен.",
+                    MessageBox.Show(UiText.Get("GPU Desktop Keeper уже запущен."),
                         "GPU Desktop Keeper",MessageBoxButtons.OK,MessageBoxIcon.Information);
                     return 0;
                 }
@@ -95,11 +98,11 @@ namespace GpuDesktopKeeper {
                     Application.EnableVisualStyles();
                     Application.SetCompatibleTextRenderingDefault(false);
                     Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
-                    using(var app=new KeeperApplication(minimized)) Application.Run(app);
+                    using(var app=new KeeperApplication(minimized,preferences)) Application.Run(app);
                     return 0;
                 } catch(Exception ex) {
                     Storage.Log("Fatal: "+ex);
-                    MessageBox.Show("Не удалось продолжить работу. Собственные ресурсы освобождены.\n"+ex.Message,
+                    MessageBox.Show(UiText.Get("Не удалось продолжить работу. Собственные ресурсы освобождены.\n")+ex.Message,
                         "GPU Desktop Keeper",MessageBoxButtons.OK,MessageBoxIcon.Error);
                     return 1;
                 } finally { Storage.Log("Main exiting"); mutex.ReleaseMutex(); }
@@ -113,7 +116,7 @@ namespace GpuDesktopKeeper {
         private readonly Control dispatch;
         private readonly NotifyIcon tray;
         private readonly ContextMenuStrip menu;
-        private readonly ToolStripMenuItem trayStatus, trayToggle;
+        private readonly ToolStripMenuItem trayStatus, trayToggle, trayShow, trayRestart, trayExit;
         private readonly System.Windows.Forms.Timer recoveryTimer, healthTimer;
         private readonly Icon onIcon,offIcon,errorIcon;
         private bool disposed,closing,flydigiWarningShown;
@@ -122,8 +125,8 @@ namespace GpuDesktopKeeper {
         private string recoveryReason;
         private bool subscribedPower,subscribedDisplay;
 
-        internal KeeperApplication(bool minimized) {
-            preferences=Storage.Load();
+        internal KeeperApplication(bool minimized,Preferences loadedPreferences) {
+            preferences=loadedPreferences; UiText.Language=preferences.Language;
             startup=new StartupManager(new TaskStartupStore(),Application.ExecutablePath,File.Exists,new RegistryStartupStore());
             engine=new KeeperEngine(mode=>new GpuLease(mode),Storage.Log,preferences.StartupMode());
             dispatch=new Control(); var handle=dispatch.Handle;
@@ -143,10 +146,10 @@ namespace GpuDesktopKeeper {
             menu=new ContextMenuStrip();
             trayStatus=new ToolStripMenuItem(); trayStatus.Enabled=false;
             trayToggle=new ToolStripMenuItem(); trayToggle.Click+=delegate { Toggle(); };
-            var show=new ToolStripMenuItem("Открыть"); show.Click+=delegate { ShowWindow(); };
-            var restart=new ToolStripMenuItem("Перезапустить фикс"); restart.Click+=delegate { Restart(); };
-            var exit=new ToolStripMenuItem("Выход"); exit.Click+=delegate { ExitThread(); };
-            menu.Items.AddRange(new ToolStripItem[]{trayStatus,show,trayToggle,restart,new ToolStripSeparator(),exit});
+            trayShow=new ToolStripMenuItem(); trayShow.Click+=delegate { ShowWindow(); };
+            trayRestart=new ToolStripMenuItem(); trayRestart.Click+=delegate { Restart(); };
+            trayExit=new ToolStripMenuItem(); trayExit.Click+=delegate { ExitThread(); };
+            menu.Items.AddRange(new ToolStripItem[]{trayStatus,trayShow,trayToggle,trayRestart,new ToolStripSeparator(),trayExit});
             Themes.Menu(menu,preferences.DarkTheme);
             tray=new NotifyIcon {ContextMenuStrip=menu,Icon=offIcon,Text="GPU Desktop Keeper 1.0",Visible=true};
             tray.DoubleClick+=delegate { ShowWindow(); };
@@ -211,7 +214,7 @@ namespace GpuDesktopKeeper {
         }
         private bool SavePreferences() {
             try { Storage.Save(preferences); return true; }
-            catch(Exception ex) { window.Feedback("Не удалось сохранить настройки: "+ex.Message); return false; }
+            catch(Exception ex) { window.Feedback("Не удалось сохранить настройки: {0}",ex.Message); return false; }
         }
         private void Toggle() {
             CancelRecovery();
@@ -227,6 +230,7 @@ namespace GpuDesktopKeeper {
             Update();
         }
         private void PreferencesChanged() {
+            UiText.Language=preferences.Language;
             Themes.Menu(menu,preferences.DarkTheme);
             healthTimer.Enabled=preferences.WatchDevice;
             if(!preferences.AutoRecover) recoveryTimer.Stop();
@@ -235,13 +239,13 @@ namespace GpuDesktopKeeper {
         }
         private void RefreshStartup() { window.RefreshStartup(startup.Read()); }
         private void StartupChanged(bool enabled) {
-            string message;
+            string message; object[] details=new object[0];
             try {
                 StartupRegistration.Apply(startup,enabled);
                 Storage.Log("Startup registration enabled="+enabled);
                 message=enabled ? "Задача создана: при входе любого пользователя, выполнение в твоём сеансе." : "Задача автозапуска удалена.";
-            } catch(Exception ex) { Storage.Log("Startup change failed: "+ex.Message); message="Не удалось изменить автозапуск: "+ex.Message; }
-            RefreshStartup(); window.Feedback(message);
+            } catch(Exception ex) { Storage.Log("Startup change failed: "+ex.Message); message="Не удалось изменить автозапуск: {0}"; details=new object[]{ex.Message}; }
+            RefreshStartup(); window.Feedback(message,details);
         }
         private void ShowFlydigiWarning() {
             if(disposed || !window.Visible || flydigiWarningShown || preferences.HideFlydigiWarning) return;
@@ -261,13 +265,13 @@ namespace GpuDesktopKeeper {
         }
         private void Update() {
             if(disposed) return;
-            string state=engine.Active ? "Фикс включён" : engine.DesiredEnabled ? "Не удалось включить" : "Фикс выключен";
-            if(recoveryTimer.Enabled) state="Восстановление: попытка "+(recoveryAttempt+1)+" из 3";
+            string state=UiText.Status(engine,recoveryTimer.Enabled,recoveryAttempt+1);
             trayStatus.Text=state;
-            trayToggle.Text=engine.DesiredEnabled ? "Выключить" : "Включить";
-            tray.Text="GPU Desktop Keeper — "+(engine.Active ? "включено" : engine.DesiredEnabled ? "ошибка" : "выключено");
+            trayToggle.Text=UiText.Get(engine.DesiredEnabled ? "Выключить" : "Включить");
+            trayShow.Text=UiText.Get("Открыть"); trayRestart.Text=UiText.Get("Перезапустить фикс"); trayExit.Text=UiText.Get("Выход");
+            tray.Text="GPU Desktop Keeper — "+UiText.Get(engine.Active ? "включено" : engine.DesiredEnabled ? "ошибка" : "выключено");
             tray.Icon=engine.Active ? onIcon : engine.DesiredEnabled ? errorIcon : offIcon;
-            window.RefreshState(engine,state,recoveryTimer.Enabled);
+            window.RefreshState(engine,recoveryTimer.Enabled,recoveryAttempt+1);
         }
         [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool DestroyIcon(IntPtr icon);
         private static Icon MakeIcon(Color color) {

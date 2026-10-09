@@ -19,7 +19,7 @@ namespace GpuDesktopKeeper {
                 if(key==null) return null;
                 object data=key.GetValue(value,null,RegistryValueOptions.DoNotExpandEnvironmentNames);
                 if(data==null) return null;
-                if(!(data is string)) throw new InvalidOperationException("Запись автозапуска имеет неизвестный формат.");
+                if(!(data is string)) throw new InvalidOperationException(UiText.Get("Запись автозапуска имеет неизвестный формат."));
                 return (string)data;
             }
         }
@@ -55,21 +55,21 @@ namespace GpuDesktopKeeper {
             } catch(Exception ex) { return new StartupState {Error=ex.Message}; }
         }
         internal void SetEnabled(bool enabled) {
-            if(enabled && !exists(path)) throw new FileNotFoundException("EXE не найден. Автозапуск не изменён.",path);
+            if(enabled && !exists(path)) throw new FileNotFoundException(UiText.Get("EXE не найден. Автозапуск не изменён."),path);
             var snapshot=store as IStartupSnapshot;
             string previous=snapshot!=null ? snapshot.Export() : store.Read();
             string previousLegacy=legacy==null ? null : legacy.Read();
             try {
                 if(enabled) {
                     store.Write(Command);
-                    if(!String.Equals(store.Read(),Command,StringComparison.Ordinal)) throw new IOException("Планировщик не подтвердил создание задачи.");
+                    if(!String.Equals(store.Read(),Command,StringComparison.Ordinal)) throw new IOException(UiText.Get("Планировщик не подтвердил создание задачи."));
                 } else {
                     store.Delete();
-                    if(snapshot!=null ? snapshot.Export()!=null : store.Read()!=null) throw new IOException("Не удалось удалить задачу автозапуска.");
+                    if(snapshot!=null ? snapshot.Export()!=null : store.Read()!=null) throw new IOException(UiText.Get("Не удалось удалить задачу автозапуска."));
                 }
                 if(legacy!=null && previousLegacy!=null) {
                     legacy.Delete();
-                    if(legacy.Read()!=null) throw new IOException("Не удалось удалить прежнюю запись Keeper из реестра.");
+                    if(legacy.Read()!=null) throw new IOException(UiText.Get("Не удалось удалить прежнюю запись Keeper из реестра."));
                 }
             } catch(Exception original) {
                 string rollbackError=null;
@@ -79,7 +79,7 @@ namespace GpuDesktopKeeper {
                 } catch(Exception ex) { rollbackError=ex.Message; }
                 try { if(legacy!=null && previousLegacy!=null && legacy.Read()!=previousLegacy) legacy.Write(previousLegacy); }
                 catch(Exception ex) { rollbackError=(rollbackError==null ? "" : rollbackError+"; ")+ex.Message; }
-                if(rollbackError!=null) throw new IOException(original.Message+" Ошибка возврата прежнего автозапуска: "+rollbackError,original);
+                if(rollbackError!=null) throw new IOException(original.Message+UiText.Get(" Ошибка возврата прежнего автозапуска: ")+rollbackError,original);
                 throw;
             }
         }

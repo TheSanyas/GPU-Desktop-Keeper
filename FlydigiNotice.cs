@@ -23,11 +23,11 @@ namespace GpuDesktopKeeper {
             panel.RowStyles.Add(new RowStyle(SizeType.Percent,100));
             panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            panel.Controls.Add(new Label {Text="Flydigi может мешать работе фикса",AutoSize=true,Dock=DockStyle.Fill,Font=new Font(Font,FontStyle.Bold),Margin=new Padding(0,0,0,12)},0,0);
-            panel.Controls.Add(new Label {Text="Flydigi Space Station может негативно влиять на этот фикс. Если лаги возвращаются, полностью закрой Flydigi через его значок в трее.",AutoSize=true,Dock=DockStyle.Fill,Margin=new Padding(0,0,0,12)},0,1);
-            hide=new CheckBox {Text="Скрывать при последующих запусках",AutoSize=true,Dock=DockStyle.Fill,Margin=new Padding(4,0,0,12)};
+            panel.Controls.Add(new Label {Text=UiText.Get("Flydigi может мешать работе фикса"),AutoSize=true,Dock=DockStyle.Fill,Font=new Font(Font,FontStyle.Bold),Margin=new Padding(0,0,0,12)},0,0);
+            panel.Controls.Add(new Label {Text=UiText.Get("Flydigi Space Station может негативно влиять на этот фикс. Если лаги возвращаются, полностью закрой Flydigi через его значок в трее."),AutoSize=true,Dock=DockStyle.Fill,Margin=new Padding(0,0,0,12)},0,1);
+            hide=new CheckBox {Text=UiText.Get("Скрывать при последующих запусках"),AutoSize=true,Dock=DockStyle.Fill,Margin=new Padding(4,0,0,12)};
             panel.Controls.Add(hide,0,2);
-            var ok=new ThemeButton {Text="Понятно",AutoSize=true,Padding=new Padding(12,5,12,5),Anchor=AnchorStyles.Right,DialogResult=DialogResult.OK};
+            var ok=new ThemeButton {Text=UiText.Get("Понятно"),AutoSize=true,Padding=new Padding(12,5,12,5),Anchor=AnchorStyles.Right,DialogResult=DialogResult.OK};
             panel.Controls.Add(ok,0,3); AcceptButton=ok; Controls.Add(panel);
             var palette=Themes.Get(darkTheme); Themes.Apply(this,palette,palette.Surface);
         }
@@ -44,9 +44,18 @@ namespace GpuDesktopKeeper {
                 var restored=Storage.Json.Deserialize<Preferences>(Storage.Json.Serialize(preferences));
                 if(!restored.HideFlydigiWarning) throw new InvalidOperationException("Warning suppression not persisted");
             }
+            string previous=UiText.Language;
+            try {
+                UiText.Language="en";
+                using(var dialog=new FlydigiNotice(true)) {
+                    if(dialog.hide.Text!="Do not show again" || dialog.AcceptButton==null || ((Control)dialog.AcceptButton).Text!="Got it")
+                        throw new InvalidOperationException("English Flydigi warning not localized");
+                }
+            } finally { UiText.Language=previous; }
         }
         internal static void RenderPreview() {
-            foreach(bool dark in new[]{false,true}) {
+            foreach(string language in new[]{"ru","en"}) foreach(bool dark in new[]{false,true}) {
+            UiText.Language=language;
             using(var dialog=new FlydigiNotice(dark)) {
                 var surface=dialog.Controls[0]; dialog.Controls.Remove(surface);
                 using(surface) {
@@ -54,10 +63,11 @@ namespace GpuDesktopKeeper {
                     surface.CreateControl(); surface.PerformLayout();
                     using(var bitmap=new Bitmap(surface.Width,surface.Height)) {
                         surface.DrawToBitmap(bitmap,new Rectangle(Point.Empty,bitmap.Size));
-                        bitmap.Save(Path.Combine(Storage.Folder,"preview-flydigi-notice"+(dark ? "-dark" : "")+".png"));
+                        bitmap.Save(Path.Combine(Storage.Folder,"preview-flydigi-notice"+(language=="en" ? "-en" : "")+(dark ? "-dark" : "")+".png"));
                     }
                 }
             }
+            UiText.Language="ru";
             }
         }
     }

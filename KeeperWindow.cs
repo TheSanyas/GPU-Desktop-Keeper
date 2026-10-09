@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -13,8 +14,14 @@ namespace GpuDesktopKeeper {
         private readonly ThemeTabs tabs;
         private readonly Label status,summary,details,feedback;
         private readonly Button toggle,restart,apply,verified,cancel;
-        private readonly ThemeButton themeToggle;
+        private readonly ThemeButton themeToggle,languageToggle;
         private readonly ToolTip themeTip;
+        private readonly Dictionary<Control,string> captions=new Dictionary<Control,string>();
+        private KeeperEngine lastEngine;
+        private bool lastRecovering;
+        private int lastRecoveryAttempt;
+        private string feedbackKey="Все изменения относятся только к работе этой программы.";
+        private object[] feedbackArgs=new object[0];
         private readonly FlowLayoutPanel choices;
         private readonly RadioButton[] modes=new RadioButton[4];
         private readonly CheckBox autoRecover,watchDevice,startMinimized,startEnabled,rememberMode,startWithWindows;
@@ -25,6 +32,7 @@ namespace GpuDesktopKeeper {
 
         internal KeeperWindow(Preferences preferences) {
             this.preferences=preferences;
+            UiText.Language=preferences.Language;
             Text="GPU Desktop Keeper 1.0";
             ownedIcon=AppIcons.Load(); Icon=ownedIcon;
             Font=new Font("Segoe UI",10f);
@@ -42,11 +50,18 @@ namespace GpuDesktopKeeper {
             root.RowStyles.Add(new RowStyle(SizeType.Percent,100));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             Controls.Add(root);
-            var header=new TableLayoutPanel {Dock=DockStyle.Top,AutoSize=true,ColumnCount=2,RowCount=2,Margin=new Padding(0)};
+            var header=new TableLayoutPanel {Dock=DockStyle.Top,AutoSize=true,ColumnCount=3,RowCount=2,Margin=new Padding(0)};
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             header.RowStyles.Add(new RowStyle(SizeType.AutoSize)); header.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             header.Controls.Add(TextLabel("GPU Desktop Keeper",20,true),0,0);
+            languageToggle=new ThemeButton {AutoSize=false,Size=new Size(52,42),Padding=new Padding(0),Margin=new Padding(12,0,0,8),Anchor=AnchorStyles.Top|AnchorStyles.Right};
+            languageToggle.Click+=delegate {
+                preferences.Language=preferences.Language=="ru" ? "en" : "ru";
+                ApplyLanguage(); Raise(PreferencesChanged);
+            };
+            header.Controls.Add(languageToggle,1,0);
             themeToggle=(ThemeButton)MakeButton("",delegate {
                 preferences.DarkTheme=!preferences.DarkTheme; ApplyTheme(); Raise(PreferencesChanged);
             });
@@ -54,16 +69,16 @@ namespace GpuDesktopKeeper {
             themeTip=new ToolTip {ShowAlways=true};
             themeToggle.Anchor=AnchorStyles.Top|AnchorStyles.Right; themeToggle.Margin=new Padding(12,0,0,8);
             themeToggle.AccessibleName="Переключить светлую или тёмную тему";
-            header.Controls.Add(themeToggle,1,0);
+            header.Controls.Add(themeToggle,2,0);
             var subtitle=TextLabel("Фикс зависаний приложений на дополнительных мониторах",10,false);
-            header.Controls.Add(subtitle,0,1); header.SetColumnSpan(subtitle,2);
+            header.Controls.Add(subtitle,0,1); header.SetColumnSpan(subtitle,3);
             root.Controls.Add(header,0,0);
             status=TextLabel("Запуск…",15,true); status.Margin=new Padding(0,16,0,14);
             root.Controls.Add(status,0,1);
             tabs=new ThemeTabs {Dock=DockStyle.Fill,Margin=new Padding(0)};
             root.Controls.Add(tabs,0,2);
-            var main=new ThemePage("Главная") {BackColor=Color.White,Padding=new Padding(16),AutoScroll=true};
-            var lab=new ThemePage("Эксперименты") {BackColor=Color.White,Padding=new Padding(16),AutoScroll=true};
+            var main=Bind(new ThemePage("Главная") {BackColor=Color.White,Padding=new Padding(16),AutoScroll=true},"Главная");
+            var lab=Bind(new ThemePage("Эксперименты") {BackColor=Color.White,Padding=new Padding(16),AutoScroll=true},"Эксперименты");
             tabs.TabPages.Add(main); tabs.TabPages.Add(lab);
             var home=Stack(); main.Controls.Add(home);
             summary=TextLabel("",11,false); home.Controls.Add(summary);
@@ -116,22 +131,40 @@ namespace GpuDesktopKeeper {
             details=TextLabel("",10,false); details.Margin=new Padding(0,12,0,8); experiment.Controls.Add(details);
             feedback=TextLabel("Все изменения относятся только к работе этой программы.",9,false);
             feedback.Margin=new Padding(0,12,0,0); root.Controls.Add(feedback,0,3);
-            ApplyTheme();
+            ApplyLanguage(); ApplyTheme();
+        }
+        private T Bind<T>(T control,string key) where T:Control {
+            if(!String.IsNullOrEmpty(key)) captions[control]=key;
+            control.Text=UiText.Get(key); return control;
+        }
+        private void ApplyLanguage() {
+            UiText.Language=preferences.Language;
+            root.SuspendLayout();
+            try {
+                foreach(var caption in captions) caption.Key.Text=UiText.Get(caption.Value);
+                foreach(KeeperMode mode in Modes.Order) modes[(int)mode].Text=Modes.Names[(int)mode];
+                languageToggle.Text=preferences.Language.ToUpperInvariant();
+                string target=UiText.Get(preferences.Language=="ru" ? "Переключить на английский" : "Переключить на русский");
+                languageToggle.AccessibleName=target; themeTip.SetToolTip(languageToggle,target);
+                RefreshThemeAction();
+                if(lastEngine!=null) RefreshState(lastEngine,lastRecovering,lastRecoveryAttempt);
+                Feedback(feedbackKey,feedbackArgs);
+            } finally { root.ResumeLayout(true); }
         }
         private TableLayoutPanel Stack() {
             var panel=new TableLayoutPanel {Dock=DockStyle.Top,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,ColumnCount=1,Margin=new Padding(0)};
             panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100)); return panel;
         }
         private Label TextLabel(string text,float size,bool bold) {
-            return new Label {Text=text,AutoSize=true,Dock=DockStyle.Fill,Font=new Font("Segoe UI",size,bold ? FontStyle.Bold : FontStyle.Regular),
-                ForeColor=bold ? ForeColor : muted,Tag=bold ? "title" : "muted",Margin=new Padding(0,0,0,8),MaximumSize=new Size(660,0)};
+            return Bind(new Label {AutoSize=true,Dock=DockStyle.Fill,Font=new Font("Segoe UI",size,bold ? FontStyle.Bold : FontStyle.Regular),
+                ForeColor=bold ? ForeColor : muted,Tag=bold ? "title" : "muted",Margin=new Padding(0,0,0,8),MaximumSize=new Size(660,0)},text);
         }
         private static FlowLayoutPanel Buttons() { return new FlowLayoutPanel {AutoSize=true,Dock=DockStyle.Fill,WrapContents=true,Margin=new Padding(0,4,0,6)}; }
-        private static Button MakeButton(string text,Action click) {
-            var button=new ThemeButton {Text=text,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,Padding=new Padding(9,6,9,6),Margin=new Padding(0,0,8,6),UseVisualStyleBackColor=true};
+        private Button MakeButton(string text,Action click) {
+            var button=Bind(new ThemeButton {AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,Padding=new Padding(9,6,9,6),Margin=new Padding(0,0,8,6),UseVisualStyleBackColor=true},text);
             button.Click+=delegate { click(); }; return button;
         }
-        private static CheckBox Check(string text,bool value) { return new CheckBox {Text=text,Checked=value,AutoSize=true,Dock=DockStyle.Fill,Margin=new Padding(0,4,0,6)}; }
+        private CheckBox Check(string text,bool value) { return Bind(new CheckBox {Checked=value,AutoSize=true,Dock=DockStyle.Fill,Margin=new Padding(0,4,0,6)},text); }
         private static void Raise(Action action) { if(action!=null) action(); }
         private KeeperMode SelectedMode() {
             for(int i=0;i<modes.Length;i++) if(modes[i].Checked) return (KeeperMode)i;
@@ -147,11 +180,14 @@ namespace GpuDesktopKeeper {
             var palette=Themes.Get(preferences.DarkTheme);
             BackColor=palette.Background; ForeColor=palette.Text;
             Themes.Apply(root,palette,palette.Background);
+            RefreshThemeAction();
+            Themes.TitleBar(this,preferences.DarkTheme); RefreshStatusColor();
+        }
+        private void RefreshThemeAction() {
             themeToggle.ThemeIcon=preferences.DarkTheme ? ThemeButtonIcon.Sun : ThemeButtonIcon.Moon;
-            string nextTheme=preferences.DarkTheme ? "Включить светлую тему" : "Включить тёмную тему";
+            string nextTheme=UiText.Get(preferences.DarkTheme ? "Включить светлую тему" : "Включить тёмную тему");
             themeToggle.AccessibleName=nextTheme;
             themeTip.SetToolTip(themeToggle,nextTheme); themeToggle.Invalidate();
-            Themes.TitleBar(this,preferences.DarkTheme); RefreshStatusColor();
         }
         protected override void OnHandleCreated(EventArgs e) {
             base.OnHandleCreated(e); Themes.TitleBar(this,preferences.DarkTheme);
@@ -160,26 +196,27 @@ namespace GpuDesktopKeeper {
             var palette=Themes.Get(preferences.DarkTheme);
             status.ForeColor=stateRecovering ? palette.Warning : stateActive ? palette.Success : stateDesired ? palette.Error : palette.Muted;
         }
-        internal void RefreshState(KeeperEngine engine,string text,bool recovering) {
-            status.Text=text;
+        internal void RefreshState(KeeperEngine engine,bool recovering,int recoveryAttempt=1) {
+            lastEngine=engine; lastRecovering=recovering; lastRecoveryAttempt=recoveryAttempt;
+            status.Text=UiText.Status(engine,recovering,recoveryAttempt);
             stateActive=engine.Active; stateDesired=engine.DesiredEnabled; stateRecovering=recovering; RefreshStatusColor();
             summary.Text=Modes.Names[(int)engine.Mode]+Environment.NewLine+"GPU: "+engine.Adapter;
             if(engine.LastError!=null) summary.Text+=Environment.NewLine+engine.LastError;
-            toggle.Text=engine.DesiredEnabled ? "Выключить" : "Включить";
+            toggle.Text=UiText.Get(engine.DesiredEnabled ? "Выключить" : "Включить");
             restart.Enabled=engine.DesiredEnabled;
             apply.Enabled=verified.Enabled=choices.Enabled=!recovering;
             cancel.Enabled=recovering;
-            details.Text="Сейчас: "+Modes.Names[(int)engine.Mode]+Environment.NewLine+
-                (engine.Active ? "Устройство 11.1 · буферов: "+engine.BufferCount+" · данные буферов: "+Modes.Bytes(engine.Mode)+" байт" : "GPU-ресурсы освобождены")+
-                Environment.NewLine+"Инициализаций в этом запуске: "+engine.Generation;
+            details.Text=UiText.Format("Сейчас: {0}",Modes.Names[(int)engine.Mode])+Environment.NewLine+
+                (engine.Active ? UiText.Format("Устройство 11.1 · буферов: {0} · данные буферов: {1} байт",engine.BufferCount,Modes.Bytes(engine.Mode)) : UiText.Get("GPU-ресурсы освобождены"))+
+                Environment.NewLine+UiText.Format("Инициализаций в этом запуске: {0}",engine.Generation);
             if(engine.LastError!=null) details.Text+=Environment.NewLine+engine.LastError;
         }
-        internal void Feedback(string text) { feedback.Text=text; }
+        internal void Feedback(string key,params object[] args) { feedbackKey=key; feedbackArgs=args; feedback.Text=UiText.Format(key,args); }
         internal void RefreshStartup(StartupState state) {
             refreshingStartup=true;
             try { startWithWindows.Checked=state.Registered; startWithWindows.Enabled=state.Error==null; }
             finally { refreshingStartup=false; }
-            if(state.Error!=null) Feedback("Не удалось прочитать автозапуск: "+state.Error);
+            if(state.Error!=null) Feedback("Не удалось прочитать автозапуск: {0}",state.Error);
             else if(state.OtherCopy) Feedback("Автозапуск указывает на другую копию Keeper. Сними и снова включи галочку, чтобы выбрать эту копию.");
             else if(state.LegacyRegistered) Feedback("Есть прежняя запись Keeper в реестре. Включи галочку, чтобы перенести автозапуск в планировщик.");
         }
@@ -212,18 +249,18 @@ namespace GpuDesktopKeeper {
                     window.PreferencesChanged+=delegate { preferencesChanged++; };
                     window.CancelRequested+=delegate { cancelled++; };
                     engine.Enable(KeeperMode.Verified,"ui check");
-                    window.RefreshState(engine,"active",false);
+                    window.RefreshState(engine,false);
                     window.tabs.SelectedIndex=1; window.tabs.SelectedTab.CreateControl();
                     window.apply.PerformClick();
                     Check(switches==1 && engine.Active && engine.Mode==Modes.Default && engine.BufferCount==0,"Buffer-free default not applied within click");
                     window.modes[0].Checked=true; window.apply.PerformClick();
                     Check(switches==2 && engine.Active && engine.Mode==KeeperMode.Verified && engine.BufferCount==2 && preferences.StartupMode()==KeeperMode.Verified,"Two-buffer experiment changed identity");
                     window.verified.PerformClick(); Check(switches==3 && engine.Active && engine.Mode==Modes.Default && window.modes[(int)Modes.Default].Checked,"Restore default not immediate");
-                    window.RefreshState(engine,"recovering",true);
+                    window.RefreshState(engine,true);
                     Check(!window.apply.Enabled && window.cancel.Enabled,"Recovery state controls");
                     window.apply.PerformClick(); Check(switches==3,"Recovery allowed blocked action");
                     window.cancel.PerformClick(); Check(cancelled==1,"Cancel recovery action");
-                    engine.Disable("ui check"); window.RefreshState(engine,"off",false);
+                    engine.Disable("ui check"); window.RefreshState(engine,false);
                     Check(window.toggle.Text=="Включить" && !window.restart.Enabled && !window.cancel.Enabled,"Off state controls");
                     window.tabs.SelectedIndex=0;
                     window.autoRecover.Checked=false; window.watchDevice.Checked=true; window.startMinimized.Checked=true;
@@ -239,7 +276,7 @@ namespace GpuDesktopKeeper {
                     Check(window.startWithWindows.Checked && window.feedback.Text.Contains("другую копию") && startupChanges==2,"Other copy or event suppression");
                     window.RefreshStartup(new StartupState {LegacyRegistered=true});
                     Check(!window.startWithWindows.Checked && window.feedback.Text.Contains("перенести") && startupChanges==2,"Legacy registration misrepresented as a scheduler task");
-                    engine.Enable(Modes.Default,"theme UI check"); window.RefreshState(engine,"active",false);
+                    engine.Enable(Modes.Default,"theme UI check"); window.RefreshState(engine,false);
                     int generation=engine.Generation,priorChanges=preferencesChanged;
                     window.themeToggle.PerformClick();
                     Check(preferences.DarkTheme && preferencesChanged==priorChanges+1 && window.BackColor==Themes.Dark.Background && window.tabs.TabPages[0].BackColor==Themes.Dark.Surface,"Dark theme switch or settings event failed");
@@ -252,6 +289,34 @@ namespace GpuDesktopKeeper {
                     Check(!preferences.DarkTheme && preferencesChanged==priorChanges+2 && window.BackColor==Themes.Light.Background && window.status.ForeColor==Themes.Light.Success,"Light theme round trip failed");
                     Check(window.themeToggle.ThemeIcon==ThemeButtonIcon.Moon && window.themeTip.GetToolTip(window.themeToggle)=="Включить тёмную тему" && window.themeToggle.AccessibleName=="Включить тёмную тему","Light theme icon, tooltip or accessibility missing");
                     Check(engine.Generation==generation && switches==3 && startupChanges==2,"Theme changed GPU state or startup registration");
+                    var header=(TableLayoutPanel)window.languageToggle.Parent;
+                    Check(header.GetColumn(window.languageToggle)==1 && header.GetColumn(window.themeToggle)==2,"Language button is not left of theme button");
+                    foreach(bool dark in new[]{false,true}) {
+                        if(preferences.DarkTheme!=dark) window.themeToggle.PerformClick();
+                        window.tabs.SelectedIndex=1;
+                        window.RefreshState(engine,false);
+                        int beforeGeneration=engine.Generation,beforeSwitches=switches,beforeStartup=startupChanges;
+                        window.Feedback("Не удалось прочитать автозапуск: {0}","simulated detail");
+                        window.languageToggle.PerformClick();
+                        Check(preferences.Language=="en" && window.languageToggle.Text=="EN" && window.tabs.TabPages[0].Text=="Home" && window.tabs.TabPages[1].Text=="Experiments","English language switch failed");
+                        Check(window.status.Text=="Fix enabled" && window.toggle.Text=="Disable" && window.restart.Text=="Restart fix" && window.apply.Text=="Apply","English dynamic state or buttons missing");
+                        Check(window.summary.Text.StartsWith("Default — device 11.1 only") && window.modes[0].Text=="Experimental — device and two buffers","English mode names missing");
+                        Check(window.feedback.Text=="Could not read startup settings: simulated detail","English formatted feedback or verbatim details failed");
+                        Check(window.tabs.SelectedIndex==1 && preferences.DarkTheme==dark && engine.Generation==beforeGeneration && switches==beforeSwitches && startupChanges==beforeStartup,"Language changed page, theme, GPU state or startup registration");
+                        foreach(var caption in window.captions) {
+                            Check(!System.Text.RegularExpressions.Regex.IsMatch(caption.Key.Text,"[А-Яа-яЁё]"),"Untranslated English caption: "+caption.Value);
+                        }
+                        var saved=Storage.Json.Deserialize<Preferences>(Storage.Json.Serialize(preferences));
+                        using(var reopened=new KeeperWindow(saved)) {
+                            Check(reopened.languageToggle.Text=="EN" && reopened.restart.Text=="Restart fix" && reopened.BackColor==Themes.Get(dark).Background,"Saved language/theme not applied on reopening");
+                        }
+                        window.RefreshState(engine,true,2);
+                        Check(window.status.Text=="Recovery: attempt 2 of 3" && window.cancel.Text=="Cancel recovery" && !window.apply.Enabled,"English recovery state failed");
+                        window.RefreshState(engine,false);
+                        window.languageToggle.PerformClick();
+                        Check(preferences.Language=="ru" && window.tabs.TabPages[0].Text=="Главная" && window.status.Text=="Фикс включён" && window.restart.Text=="Перезапустить фикс","Russian language round trip failed");
+                        Check(window.feedback.Text=="Не удалось прочитать автозапуск: simulated detail" && engine.Generation==beforeGeneration && startupChanges==beforeStartup,"Russian feedback restore or state isolation failed");
+                    }
                 }
             }
         }
@@ -262,21 +327,21 @@ namespace GpuDesktopKeeper {
             Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
             using(var engine=new KeeperEngine(mode=>new PreviewLease(mode),delegate { }))
             using(var window=new KeeperWindow(new Preferences())) {
-                window.Text="GPU Desktop Keeper "+Program.Version+" — проверка интерфейса";
+                window.Text="GPU Desktop Keeper "+Program.Version+" — "+UiText.Get("проверка интерфейса");
                 engine.Enable(Modes.Default,"live preview with fake GPU");
-                window.RefreshState(engine,"Фикс включён",false);
+                window.RefreshState(engine,false);
                 Application.Run(window);
             }
             return 0;
         }
         internal static int RenderPreviews() {
             Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
-            foreach(bool dark in new[]{false,true}) {
-            string suffix=dark ? "-dark" : "";
+            foreach(string language in new[]{"ru","en"}) foreach(bool dark in new[]{false,true}) {
+            string suffix=(language=="en" ? "-en" : "")+(dark ? "-dark" : "");
             using(var engine=new KeeperEngine(mode=>new PreviewLease(mode),delegate { }))
-            using(var window=new KeeperWindow(new Preferences {DarkTheme=dark})) {
+            using(var window=new KeeperWindow(new Preferences {DarkTheme=dark,Language=language})) {
                 engine.Enable(Modes.Default,"preview with fake GPU");
-                window.RefreshState(engine,"Фикс включён",false);
+                window.RefreshState(engine,false);
                 window.RefreshStartup(new StartupState());
                 // Render the client panel detached from the invisible Form. No desktop window,
                 // tray icon, real GPU device or SystemEvents subscription is created here.
@@ -294,14 +359,14 @@ namespace GpuDesktopKeeper {
                         }
                     }
                     engine.Disable("preview off"); window.tabs.SelectedIndex=0;
-                    window.RefreshState(engine,"Фикс выключен",false);
+                    window.RefreshState(engine,false);
                     using(var image=new Bitmap(surface.Width,surface.Height)) {
                         surface.DrawToBitmap(image,new Rectangle(Point.Empty,image.Size)); image.Save(Path.Combine(Storage.Folder,"preview-off"+suffix+".png"));
                     }
                     engine.Enable(Modes.Default,"preview with fake GPU");
-                    window.RefreshState(engine,"Фикс включён",false);
+                    window.RefreshState(engine,false);
                     window.tabs.SelectedIndex=1;
-                    window.RefreshState(engine,"Восстановление: попытка 1 из 3",true);
+                    window.RefreshState(engine,true);
                     using(var image=new Bitmap(surface.Width,surface.Height)) {
                         surface.DrawToBitmap(image,new Rectangle(Point.Empty,image.Size)); image.Save(Path.Combine(Storage.Folder,"preview-recovery"+suffix+".png"));
                     }
@@ -309,6 +374,7 @@ namespace GpuDesktopKeeper {
             }
             }
             FlydigiNotice.RenderPreview();
+            UiText.Language="ru";
             return 0;
         }
     }

@@ -21,30 +21,32 @@ namespace GpuDesktopKeeper {
             catch(Exception ex) { if(!AccessDenied(ex)) throw; }
             // Elevate only the short registration helper, never the running Keeper or its task action.
             var info=new ProcessStartInfo(Application.ExecutablePath,
-                "--configure-startup "+(enabled ? "enable" : "disable")+" "+TaskStartupStore.CurrentSid()) {
+                "--configure-startup "+(enabled ? "enable" : "disable")+" "+TaskStartupStore.CurrentSid()+" "+UiText.Normalize(UiText.Language)) {
                 UseShellExecute=true,Verb="runas",WorkingDirectory=AppDomain.CurrentDomain.BaseDirectory
             };
             try {
                 using(var helper=Process.Start(info)) {
                     helper.WaitForExit();
-                    if(helper.ExitCode!=0) throw new IOException("Не удалось изменить задачу. Причина показана в окне настройки автозапуска.");
+                    if(helper.ExitCode!=0) throw new IOException(UiText.Get("Не удалось изменить задачу. Причина показана в окне настройки автозапуска."));
                 }
             } catch(Win32Exception ex) {
-                if(ex.NativeErrorCode==1223) throw new OperationCanceledException("Изменение автозапуска отменено в запросе Windows.",ex);
+                if(ex.NativeErrorCode==1223) throw new OperationCanceledException(UiText.Get("Изменение автозапуска отменено в запросе Windows."),ex);
                 throw;
             }
         }
         internal static int RunHelper(string[] args) {
             // No mutex, tray, preferences or GPU resources are created on this code path.
-            if(args.Length!=3 || (args[1]!="enable" && args[1]!="disable")) return 2;
+            if((args.Length!=3 && args.Length!=4) || (args[1]!="enable" && args[1]!="disable")) return 2;
+            if(args.Length==4 && args[3]!="ru" && args[3]!="en") return 2;
+            UiText.Language=args.Length==4 ? args[3] : "ru";
             try {
                 if(args[2]!=TaskStartupStore.CurrentSid())
-                    throw new InvalidOperationException("Подтверди запрос Windows той же учётной записью, в которой запущен Keeper.");
+                    throw new InvalidOperationException(UiText.Get("Подтверди запрос Windows той же учётной записью, в которой запущен Keeper."));
                 var manager=new StartupManager(new TaskStartupStore(),Application.ExecutablePath,File.Exists,new RegistryStartupStore());
                 manager.SetEnabled(args[1]=="enable");
                 return 0;
             } catch(Exception ex) {
-                MessageBox.Show("Не удалось изменить автозапуск: "+ex.Message,"GPU Desktop Keeper — автозапуск",MessageBoxButtons.OK,MessageBoxIcon.Error);
+                MessageBox.Show(UiText.Get("Не удалось изменить автозапуск: ")+ex.Message,UiText.Get("GPU Desktop Keeper — автозапуск"),MessageBoxButtons.OK,MessageBoxIcon.Error);
                 return 1;
             }
         }
@@ -58,7 +60,7 @@ namespace GpuDesktopKeeper {
         internal const string Source="GpuDesktopKeeper.Autostart.v1";
         internal static void SplitCommand(string command,out string path,out string arguments) {
             int end=command==null ? -1 : command.IndexOf('"',1);
-            if(String.IsNullOrEmpty(command) || command[0]!='"' || end<2) throw new ArgumentException("Некорректный путь автозапуска.");
+            if(String.IsNullOrEmpty(command) || command[0]!='"' || end<2) throw new ArgumentException(UiText.Get("Некорректный путь автозапуска."));
             path=command.Substring(1,end-1); arguments=command.Substring(end+1).Trim();
         }
         internal static string Build(string command,string sid) {
@@ -67,7 +69,7 @@ namespace GpuDesktopKeeper {
             using(var w=XmlWriter.Create(text,new XmlWriterSettings {OmitXmlDeclaration=true})) {
                 w.WriteStartElement("Task",Namespace); w.WriteAttributeString("version","1.2");
                 w.WriteStartElement("RegistrationInfo");
-                w.WriteElementString("Description","GPU Desktop Keeper: запуск в трей при входе любого пользователя; выполнение в интерактивном сеансе владельца задачи.");
+                w.WriteElementString("Description",UiText.Get("GPU Desktop Keeper: запуск в трей при входе любого пользователя; выполнение в интерактивном сеансе владельца задачи."));
                 w.WriteElementString("Source",Source); w.WriteEndElement();
                 w.WriteStartElement("Triggers"); w.WriteStartElement("LogonTrigger");
                 // An omitted trigger UserId means any user logon. The execution principal remains the owner below.
@@ -103,7 +105,7 @@ namespace GpuDesktopKeeper {
         internal static void CheckOwner(string xml,string sid) {
             var doc=Load(xml);
             if(Value(doc,"/t:Task/t:RegistrationInfo/t:Source")!=Source || !SameUser(Value(doc,"/t:Task/t:Principals/t:Principal/t:UserId"),sid))
-                throw new InvalidOperationException("Задача с таким именем не принадлежит этой установке Keeper. Она не изменена.");
+                throw new InvalidOperationException(UiText.Get("Задача с таким именем не принадлежит этой установке Keeper. Она не изменена."));
         }
         internal static bool SameUser(string identifier,string sid) {
             if(String.Equals(identifier,sid,StringComparison.OrdinalIgnoreCase)) return true;
@@ -115,9 +117,9 @@ namespace GpuDesktopKeeper {
             var doc=Load(xml); var ns=new XmlNamespaceManager(doc.NameTable); ns.AddNamespace("t",Namespace);
             if(Value(doc,"/t:Task/t:Settings/t:Enabled")=="false") return null;
             var actions=doc.SelectNodes("/t:Task/t:Actions/*",ns);
-            if(actions.Count!=1 || actions[0].LocalName!="Exec") throw new InvalidOperationException("Неизвестное действие в задаче Keeper.");
+            if(actions.Count!=1 || actions[0].LocalName!="Exec") throw new InvalidOperationException(UiText.Get("Неизвестное действие в задаче Keeper."));
             string path=Value(doc,"/t:Task/t:Actions/t:Exec/t:Command");
-            if(String.IsNullOrEmpty(path)) throw new InvalidOperationException("У задачи Keeper отсутствует путь к EXE.");
+            if(String.IsNullOrEmpty(path)) throw new InvalidOperationException(UiText.Get("У задачи Keeper отсутствует путь к EXE."));
             return "\""+path+"\" "+Value(doc,"/t:Task/t:Actions/t:Exec/t:Arguments");
         }
     }

@@ -231,6 +231,7 @@ namespace GpuDesktopKeeper {
                 Padding=new Padding(14,5,14,5),Margin=new Padding(0,0,3,3),FlatStyle=FlatStyle.Flat,UseVisualStyleBackColor=false,
                 TabHeader=true,Palette=palette,AccessibleName=page.Text,AccessibleRole=AccessibleRole.PageTab};
             button.Click+=delegate { SelectedIndex=index; };
+            page.TextChanged+=delegate { button.Text=page.Text; button.AccessibleName=page.Text; };
             buttons.Add(button); headers.Controls.Add(button);
             page.Dock=DockStyle.Fill; page.Visible=false; body.Controls.Add(page);
             if(selectedIndex<0) SelectedIndex=0;
