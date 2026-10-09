@@ -56,7 +56,7 @@ namespace GpuDesktopKeeper {
             header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             header.RowStyles.Add(new RowStyle(SizeType.AutoSize)); header.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             header.Controls.Add(TextLabel("GPU Desktop Keeper",20,true),0,0);
-            languageToggle=new ThemeButton {AutoSize=false,Size=new Size(52,42),Padding=new Padding(0),Margin=new Padding(12,0,0,8),Anchor=AnchorStyles.Top|AnchorStyles.Right};
+            languageToggle=new ThemeButton {AutoSize=false,Size=new Size(42,42),Padding=new Padding(0),Margin=new Padding(12,0,0,8),Anchor=AnchorStyles.Top|AnchorStyles.Right};
             languageToggle.Click+=delegate {
                 preferences.Language=preferences.Language=="ru" ? "en" : "ru";
                 ApplyLanguage(); Raise(PreferencesChanged);
