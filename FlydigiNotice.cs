@@ -23,7 +23,7 @@ namespace GpuDesktopKeeper {
             panel.RowStyles.Add(new RowStyle(SizeType.Percent,100));
             panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            panel.Controls.Add(new Label {Text="Flydigi может мешать работе обхода",AutoSize=true,Dock=DockStyle.Fill,Font=new Font(Font,FontStyle.Bold),Margin=new Padding(0,0,0,12)},0,0);
+            panel.Controls.Add(new Label {Text="Flydigi может мешать работе фикса",AutoSize=true,Dock=DockStyle.Fill,Font=new Font(Font,FontStyle.Bold),Margin=new Padding(0,0,0,12)},0,0);
             panel.Controls.Add(new Label {Text="Flydigi Space Station может негативно влиять на этот фикс. Если лаги возвращаются, полностью закрой Flydigi через его значок в трее.",AutoSize=true,Dock=DockStyle.Fill,Margin=new Padding(0,0,0,12)},0,1);
             hide=new CheckBox {Text="Скрывать при последующих запусках",AutoSize=true,Dock=DockStyle.Fill,Margin=new Padding(4,0,0,12)};
             panel.Controls.Add(hide,0,2);

@@ -144,7 +144,7 @@ namespace GpuDesktopKeeper {
             trayStatus=new ToolStripMenuItem(); trayStatus.Enabled=false;
             trayToggle=new ToolStripMenuItem(); trayToggle.Click+=delegate { Toggle(); };
             var show=new ToolStripMenuItem("Открыть"); show.Click+=delegate { ShowWindow(); };
-            var restart=new ToolStripMenuItem("Перезапустить обход"); restart.Click+=delegate { Restart(); };
+            var restart=new ToolStripMenuItem("Перезапустить фикс"); restart.Click+=delegate { Restart(); };
             var exit=new ToolStripMenuItem("Выход"); exit.Click+=delegate { ExitThread(); };
             menu.Items.AddRange(new ToolStripItem[]{trayStatus,show,trayToggle,restart,new ToolStripSeparator(),exit});
             Themes.Menu(menu,preferences.DarkTheme);
@@ -261,7 +261,7 @@ namespace GpuDesktopKeeper {
         }
         private void Update() {
             if(disposed) return;
-            string state=engine.Active ? "Обход включён" : engine.DesiredEnabled ? "Не удалось включить" : "Обход выключен";
+            string state=engine.Active ? "Фикс включён" : engine.DesiredEnabled ? "Не удалось включить" : "Фикс выключен";
             if(recoveryTimer.Enabled) state="Восстановление: попытка "+(recoveryAttempt+1)+" из 3";
             trayStatus.Text=state;
             trayToggle.Text=engine.DesiredEnabled ? "Выключить" : "Включить";

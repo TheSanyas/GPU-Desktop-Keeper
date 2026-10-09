@@ -55,7 +55,7 @@ namespace GpuDesktopKeeper {
             themeToggle.Anchor=AnchorStyles.Top|AnchorStyles.Right; themeToggle.Margin=new Padding(12,0,0,8);
             themeToggle.AccessibleName="Переключить светлую или тёмную тему";
             header.Controls.Add(themeToggle,1,0);
-            var subtitle=TextLabel("Обход зависаний приложений на дополнительных мониторах",10,false);
+            var subtitle=TextLabel("Фикс зависаний приложений на дополнительных мониторах",10,false);
             header.Controls.Add(subtitle,0,1); header.SetColumnSpan(subtitle,2);
             root.Controls.Add(header,0,0);
             status=TextLabel("Запуск…",15,true); status.Margin=new Padding(0,16,0,14);
@@ -69,15 +69,15 @@ namespace GpuDesktopKeeper {
             summary=TextLabel("",11,false); home.Controls.Add(summary);
             var mainButtons=Buttons();
             toggle=MakeButton("Выключить",delegate { Raise(ToggleRequested); });
-            restart=MakeButton("Перезапустить обход",delegate { Raise(RestartRequested); });
+            restart=MakeButton("Перезапустить фикс",delegate { Raise(RestartRequested); });
             mainButtons.Controls.Add(toggle); mainButtons.Controls.Add(restart);
             home.Controls.Add(mainButtons);
             var settingsTitle=TextLabel("Поведение программы",11,true); settingsTitle.Margin=new Padding(0,14,0,6);
             home.Controls.Add(settingsTitle);
-            autoRecover=Check("Восстанавливать обход после сна и при потере устройства",preferences.AutoRecover);
+            autoRecover=Check("Восстанавливать фикс после сна и при потере устройства",preferences.AutoRecover);
             watchDevice=Check("Проверять доступность GPU каждые 10 секунд",preferences.WatchDevice);
             startMinimized=Check("При запуске сразу сворачивать окно в трей",preferences.StartMinimized);
-            startEnabled=Check("Включать обход при запуске программы",preferences.StartEnabled);
+            startEnabled=Check("Включать фикс при запуске программы",preferences.StartEnabled);
             rememberMode=Check("Запоминать успешно применённый режим",preferences.RememberMode);
             startWithWindows=Check("Автозапуск при запуске системы",false);
             startWithWindows.Enabled=false;
@@ -264,7 +264,7 @@ namespace GpuDesktopKeeper {
             using(var window=new KeeperWindow(new Preferences())) {
                 window.Text="GPU Desktop Keeper "+Program.Version+" — проверка интерфейса";
                 engine.Enable(Modes.Default,"live preview with fake GPU");
-                window.RefreshState(engine,"Обход включён",false);
+                window.RefreshState(engine,"Фикс включён",false);
                 Application.Run(window);
             }
             return 0;
@@ -276,7 +276,7 @@ namespace GpuDesktopKeeper {
             using(var engine=new KeeperEngine(mode=>new PreviewLease(mode),delegate { }))
             using(var window=new KeeperWindow(new Preferences {DarkTheme=dark})) {
                 engine.Enable(Modes.Default,"preview with fake GPU");
-                window.RefreshState(engine,"Обход включён",false);
+                window.RefreshState(engine,"Фикс включён",false);
                 window.RefreshStartup(new StartupState());
                 // Render the client panel detached from the invisible Form. No desktop window,
                 // tray icon, real GPU device or SystemEvents subscription is created here.
@@ -294,12 +294,12 @@ namespace GpuDesktopKeeper {
                         }
                     }
                     engine.Disable("preview off"); window.tabs.SelectedIndex=0;
-                    window.RefreshState(engine,"Обход выключен",false);
+                    window.RefreshState(engine,"Фикс выключен",false);
                     using(var image=new Bitmap(surface.Width,surface.Height)) {
                         surface.DrawToBitmap(image,new Rectangle(Point.Empty,image.Size)); image.Save(Path.Combine(Storage.Folder,"preview-off"+suffix+".png"));
                     }
                     engine.Enable(Modes.Default,"preview with fake GPU");
-                    window.RefreshState(engine,"Обход включён",false);
+                    window.RefreshState(engine,"Фикс включён",false);
                     window.tabs.SelectedIndex=1;
                     window.RefreshState(engine,"Восстановление: попытка 1 из 3",true);
                     using(var image=new Bitmap(surface.Width,surface.Height)) {
